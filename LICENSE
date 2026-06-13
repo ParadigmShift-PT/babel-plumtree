@@ -1,0 +1,57 @@
+Copyright (c) 2026 ParadigmShift, Lda. All rights reserved.
+
+This software and its associated documentation ("Software") are the proprietary
+property of ParadigmShift, Lda ("ParadigmShift").
+
+PERMITTED USE
+
+You may use, copy, and modify this Software solely for non-commercial purposes,
+including academic research, personal projects, and evaluation.
+
+Commercial use of this Software — including but not limited to incorporating it
+into a product or service offered for a fee, using it to operate an internal
+business system, or distributing it as part of a commercial offering — is
+permitted exclusively to ParadigmShift and to parties that have obtained a
+separate written commercial licence from ParadigmShift.
+
+To obtain a commercial licence, contact: info@paradigmshift.pt
+
+ATTRIBUTION
+
+Any permitted use or redistribution must retain this copyright notice in all
+copies or substantial portions of the Software.
+
+ACADEMIC ACKNOWLEDGEMENT
+
+This Software is an independent ParadigmShift implementation of the Plumtree
+("push-lazy-push multicast tree") protocol. It is not derived from any
+third-party source code. Work that uses or builds upon this Software is asked
+to cite the original protocol publication:
+
+    João Leitão, José Pereira, and Luís Rodrigues. "Epidemic Broadcast Trees."
+    In Proceedings of the 26th IEEE International Symposium on Reliable
+    Distributed Systems (SRDS 2007), pp. 301–310, Beijing, China, October 2007.
+    IEEE. doi:10.1109/SRDS.2007.27.
+
+    João Leitão. "Gossip-Based Broadcast Protocols." MSc thesis, Departamento
+    de Informática, Faculdade de Ciências da Universidade de Lisboa, 2007.
+
+The single-tree (Plumtree) variant follows the paper above. The multiple-trees
+(MultiPlumtree) variant additionally adopts design elements — per-root trees,
+the periodic lazy tick over a standing queue of outstanding announcements, and
+the IGNORED_IHAVE acknowledgement — from Riak's riak_core_broadcast module,
+originally implemented by Jordan West:
+
+    https://github.com/basho/riak_core/blob/develop/src/riak_core_broadcast.erl
+
+No code from that project is included here; the acknowledgement is for the
+design. With thanks to Jordan West and the riak_core authors.
+
+NO WARRANTY
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL
+PARADIGMSHIFT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN
+AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
