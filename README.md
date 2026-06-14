@@ -1,11 +1,12 @@
 # Babel Plumtree (Epidemic Broadcast Trees)
 
-Push-lazy-push multicast tree dissemination for [Babel](https://github.com/)
-applications. Provided and evolved independently by ParadigmShift.
+Push-lazy-push multicast tree dissemination for
+[Babel](https://ieeexplore.ieee.org/document/9996836) applications. Provided and
+evolved independently by ParadigmShift.
 
 **Group ID:** `pt.paradigmshift.babel`
 **Artifact ID:** `plumtree`
-**Current version:** `0.1.0`
+**Current version:** `0.2.0`
 **Tested with:** `pt.paradigmshift.babel:babel-core` (Babel-Swarm core fork) and
 `pt.paradigmshift.babel:babel-protocols-common` (shared dissemination /
 membership API surface).
@@ -31,6 +32,17 @@ in — and any work building on it is asked to cite:
 >
 > João Leitão. **Gossip-Based Broadcast Protocols.** MSc thesis, Departamento
 > de Informática, Faculdade de Ciências da Universidade de Lisboa, 2007.
+
+This module builds on the **Babel** distributed-protocols framework (the
+ParadigmShift `babel-core` fork of Babel-Swarm), originally developed at
+[NOVA LINCS](https://nova-lincs.di.fct.unl.pt) in the
+[TaRDIS](https://www.project-tardis.eu) European project and described in:
+
+> Pedro Fouto, Pedro Á. Costa, Nuno Preguiça, and João Leitão. **Babel: A
+> Framework for Developing Performant and Dependable Distributed Protocols.**
+> In *Proc. 41st International Symposium on Reliable Distributed Systems (SRDS
+> 2022)*, pp. 146–155, Vienna, Austria, September 2022. IEEE.
+> doi:[10.1109/SRDS55811.2022.00022](https://doi.org/10.1109/SRDS55811.2022.00022).
 
 The handler structure, variable names (`eagerPushPeers`, `lazyPushPeers`,
 `missing`, `round`, …) and the optional tree optimization follow Algorithms 1–4
@@ -179,25 +191,70 @@ where a neighbour's port is taken as its membership port `+ 1`.
 
 ## How application protocols plug in
 
-Issue a `BroadcastRequest(sender, payload, protoID)`; receive a
-`BroadcastDelivery(sender, payload, timestamp)` notification on every node when
-the message arrives. The protocol is oblivious to the payload shape — it
-carries opaque bytes.
+A dissemination protocol carries opaque bytes: your application protocol hands it
+a payload to broadcast and is notified on every node — including the sender —
+when a message arrives. Membership comes from any protocol that fires
+`NeighborUp` / `NeighborDown` — typically `babel-hyparview` (which also announces
+a shareable channel), or a static-peer-list wrapper.
 
-Membership comes from any protocol that fires `NeighborUp` / `NeighborDown`
-— typically `babel-hyparview` (which also announces a shareable channel), or a
-static-peer-list wrapper.
+### Wiring (in your launcher)
 
-### Example (shared HyParView channel)
+```java
+Babel babel = Babel.getInstance();
+
+// Membership owns the channel (and, with babel.discovery set, auto-finds peers).
+HyParView membership = new HyParView(TCPChannel.NAME, props, myself);
+
+// Dissemination: MultiPlumtree (one tree per source) or Plumtree (one shared tree).
+MultiPlumtree broadcast = new MultiPlumtree(props, myself);
+
+// Your application protocol; it is given the dissemination protocol's id to broadcast to.
+MyApp app = new MyApp(MultiPlumtree.PROTOCOL_ID);
+
+babel.registerProtocol(membership);
+babel.registerProtocol(broadcast);
+babel.registerProtocol(app);
+
+membership.init(props);
+broadcast.init(props);
+app.init(props);
+
+babel.start();
+```
+
+### Inside your application protocol
+
+```java
+// once, in init(): be notified of every delivered broadcast
+subscribeNotification(BroadcastDelivery.NOTIFICATION_ID, this::uponDeliver);
+
+// to send: hand the dissemination protocol opaque bytes (broadcastProtoId is the id passed in above)
+sendRequest(new BroadcastRequest(myself, payloadBytes, getProtoId()), broadcastProtoId);
+
+// to receive: fires on every node, including the originator
+private void uponDeliver(BroadcastDelivery notif, short sourceProto) {
+    byte[] payload = notif.getPayload();
+    // ... decode and apply to application state ...
+}
+```
+
+### Sharing HyParView's channel (recommended)
+
+By default the dissemination protocol opens its own `TCPChannel`. To run it over
+HyParView's channel instead (one socket per node), set:
 
 ```properties
-# membership owns the channel
-babel.discovery pt.unl.fct.di.novasys.babel.core.protocols.discovery.MulticastDiscoveryProtocol
-HyParView.Channel.Port 5000
+# membership owns the channel, and auto-discovers peers on the LAN
+babel.discovery=pt.unl.fct.di.novasys.babel.core.protocols.discovery.MulticastDiscoveryProtocol
+HyParView.Channel.Port=5000
 
-# dissemination shares it
-Plumtree.UseSharedChannel true
+# dissemination attaches to the announced channel instead of opening its own
+MultiPlumtree.UseSharedChannel=true
 ```
+
+For a complete, runnable wiring (HyParView + MultiPlumtree/Plumtree + a
+replicated key-value app), see the **PlumtreeKV** demo:
+[`babel-plumtreekv-demo`](https://github.com/ParadigmShift-PT/babel-plumtreekv-demo).
 
 ## Build
 

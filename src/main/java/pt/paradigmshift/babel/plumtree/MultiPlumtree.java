@@ -247,7 +247,7 @@ public class MultiPlumtree extends GenericProtocol {
     /* ───────────────────────── Request handlers ──────────────────────── */
 
     private void uponBroadcastRequest(BroadcastRequest request, short protoID) {
-        GossipMessage msg = new GossipMessage(request.getTimestamp(), myself, request.getPayload(), protoID);
+        GossipMessage msg = new GossipMessage(request.getTimestamp(), myself, request.getPayload());
         Host root = myself; // we originate this tree
         logger.debug("Broadcast {} on own tree (eager={})", msg.getMID(), eagerPeers(root).size());
 

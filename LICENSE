@@ -47,6 +47,16 @@ originally implemented by Jordan West:
 No code from that project is included here; the acknowledgement is for the
 design. With thanks to Jordan West and the riak_core authors.
 
+This Software is built on the Babel distributed-protocols framework (the
+ParadigmShift babel-core fork of Babel-Swarm), originally developed at NOVA
+LINCS in the TaRDIS European project and described in:
+
+    Pedro Fouto, Pedro Á. Costa, Nuno Preguiça, and João Leitão. "Babel: A
+    Framework for Developing Performant and Dependable Distributed Protocols."
+    In Proceedings of the 41st International Symposium on Reliable Distributed
+    Systems (SRDS 2022), pp. 146–155, Vienna, Austria, September 2022. IEEE.
+    doi:10.1109/SRDS55811.2022.00022.
+
 NO WARRANTY
 
 THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR

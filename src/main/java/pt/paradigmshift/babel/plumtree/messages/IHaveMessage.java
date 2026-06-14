@@ -56,6 +56,7 @@ public class IHaveMessage extends ProtoMessage {
         return root;
     }
 
+    /** @return the (messageId, round) pairs announced in this batch */
     public List<Announcement> getAnnouncements() {
         return announcements;
     }

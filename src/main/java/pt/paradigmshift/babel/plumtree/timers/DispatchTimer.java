@@ -17,6 +17,7 @@ public class DispatchTimer extends ProtoTimer {
     /** Babel timer numeric identifier. */
     public static final short TIMER_CODE = 3002;
 
+    /** Create the periodic lazy-dispatch timer (scheduled with the configured period). */
     public DispatchTimer() {
         super(TIMER_CODE);
     }

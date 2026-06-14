@@ -21,11 +21,13 @@ public class IHaveTimeout extends ProtoTimer {
 
     private final UUID messageId;
 
+    /** Arm a recovery timer for the message whose {@code IHAVE} was just received. */
     public IHaveTimeout(UUID messageId) {
         super(TIMER_CODE);
         this.messageId = messageId;
     }
 
+    /** @return the id of the message this timer is waiting to receive */
     public UUID getMessageId() {
         return messageId;
     }

@@ -36,7 +36,6 @@ public class GossipMessage extends IdentifiableProtoMessage {
     private final Host sender;
     private final byte[] payload;
     private int round;
-    private short protoID;
 
     /**
      * Construct a fresh broadcast initiated by this node: assigns a new
@@ -44,28 +43,25 @@ public class GossipMessage extends IdentifiableProtoMessage {
      * host and payload so later mutation by the caller cannot affect the
      * in-flight message.
      *
-     * @param t   the timestamp the broadcast was issued at
-     * @param s   the original sender (also the tree root in MultiPlumtree)
-     * @param p   the opaque application payload
-     * @param pID the identifier of the protocol that issued the broadcast
+     * @param t the timestamp the broadcast was issued at
+     * @param s the original sender (also the tree root in MultiPlumtree)
+     * @param p the opaque application payload
      */
-    public GossipMessage(Timestamp t, Host s, byte[] p, short pID) {
+    public GossipMessage(Timestamp t, Host s, byte[] p) {
         super(GossipMessage.MSG_CODE);
         this.timestamp = Timestamp.from(t.toInstant());
         this.sender = new Host(s.getAddress(), s.getPort());
         this.payload = p.clone();
         this.round = 0;
-        this.protoID = pID;
     }
 
     /** Deserializer target. */
-    private GossipMessage(UUID mid, long t, Host s, byte[] p, int round, short pID) {
+    private GossipMessage(UUID mid, long t, Host s, byte[] p, int round) {
         super(GossipMessage.MSG_CODE, mid);
         this.timestamp = new Timestamp(t);
         this.sender = s;
         this.payload = p;
         this.round = round;
-        this.protoID = pID;
     }
 
     /** Copy-constructor used by {@link #clone()}. Shares the payload array. */
@@ -75,7 +71,6 @@ public class GossipMessage extends IdentifiableProtoMessage {
         this.sender = m.sender;
         this.payload = m.payload;
         this.round = m.round;
-        this.protoID = m.protoID;
     }
 
     @Override
@@ -92,6 +87,7 @@ public class GossipMessage extends IdentifiableProtoMessage {
         return new GossipMessage(this);
     }
 
+    /** @return the wall-clock time the broadcast was originally issued at */
     public Timestamp getTimestamp() {
         return timestamp;
     }
@@ -101,6 +97,11 @@ public class GossipMessage extends IdentifiableProtoMessage {
         return sender;
     }
 
+    /**
+     * @return the opaque application payload. The returned array is <b>shared</b>,
+     *         not copied — treat it as read-only (delivery to the application
+     *         clones it; see {@link #generateDeliveryNotification(short)}).
+     */
     public byte[] getPayload() {
         return payload;
     }
@@ -110,16 +111,9 @@ public class GossipMessage extends IdentifiableProtoMessage {
         return round;
     }
 
+    /** Set the hop count; the protocol increments this on every relay. */
     public void setRound(int round) {
         this.round = round;
-    }
-
-    public short getProtoID() {
-        return protoID;
-    }
-
-    public void setProtoID(short protoID) {
-        this.protoID = protoID;
     }
 
     @Override
@@ -130,7 +124,6 @@ public class GossipMessage extends IdentifiableProtoMessage {
                 + ", round=" + round
                 + ", timestamp=" + timestamp
                 + ", payload size=" + payload.length
-                + ", protoID=" + protoID
                 + '}';
     }
 
@@ -142,7 +135,6 @@ public class GossipMessage extends IdentifiableProtoMessage {
             Host.serializer.serialize(msg.sender, out);
             out.writeLong(msg.timestamp.getTime());
             out.writeInt(msg.round);
-            out.writeShort(msg.protoID);
             out.writeInt(msg.payload.length);
             out.writeBytes(msg.payload);
         }
@@ -153,14 +145,13 @@ public class GossipMessage extends IdentifiableProtoMessage {
             Host origin = Host.serializer.deserialize(in);
             long t = in.readLong();
             int round = in.readInt();
-            short pid = in.readShort();
             int len = in.readInt();
             if (len < 0 || len > in.readableBytes()) {
                 throw new IOException("GossipMessage: payload length out of range: " + len);
             }
             byte[] payload = new byte[len];
             in.readBytes(payload);
-            return new GossipMessage(mid, t, origin, payload, round, pid);
+            return new GossipMessage(mid, t, origin, payload, round);
         }
     };
 }

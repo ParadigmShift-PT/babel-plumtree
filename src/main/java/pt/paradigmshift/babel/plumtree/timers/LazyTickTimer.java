@@ -25,6 +25,7 @@ public class LazyTickTimer extends ProtoTimer {
     /** Babel timer numeric identifier. */
     public static final short TIMER_CODE = 3101;
 
+    /** Create the periodic lazy-tick timer (scheduled with {@code MultiPlumtree.LazyTickPeriod}). */
     public LazyTickTimer() {
         super(TIMER_CODE);
     }

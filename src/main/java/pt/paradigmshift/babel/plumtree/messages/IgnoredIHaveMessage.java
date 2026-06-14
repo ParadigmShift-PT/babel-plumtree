@@ -47,10 +47,12 @@ public class IgnoredIHaveMessage extends ProtoMessage {
         this.announcements = announcements;
     }
 
+    /** @return the tree root the acknowledged announcements belong to, or {@code null} */
     public Host getRoot() {
         return root;
     }
 
+    /** @return the (messageId, round) pairs being acknowledged as already held */
     public List<Announcement> getAnnouncements() {
         return announcements;
     }

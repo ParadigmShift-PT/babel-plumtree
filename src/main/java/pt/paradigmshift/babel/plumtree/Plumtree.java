@@ -146,10 +146,11 @@ public class Plumtree extends GenericProtocol {
     public static final boolean DEFAULT_OPTIMIZATION = false;
 
     /**
-     * Property — optimization threshold: the eager-vs-lazy hop-count difference
-     * below which the tree is left alone. Lower values optimize more
-     * aggressively (less stable); the paper suggests a value close to the
-     * overlay diameter for the shared-tree / multi-sender case.
+     * Property — optimization threshold: the minimum eager-vs-lazy hop-count
+     * difference at or above which the optimization swaps a long eager link for
+     * a shorter lazy one (a smaller difference leaves the tree unchanged). Lower
+     * values optimize more aggressively (less stable); the paper suggests a value
+     * close to the overlay diameter for the shared-tree / multi-sender case.
      */
     public static final String PAR_THRESHOLD = "Plumtree.Optimization.Threshold";
     /** Default optimization threshold: {@value} rounds. */
@@ -289,7 +290,7 @@ public class Plumtree extends GenericProtocol {
 
     // upon event Broadcast(m)  [Algorithm 1, lines 18-23]
     private void uponBroadcastRequest(BroadcastRequest request, short protoID) {
-        GossipMessage msg = new GossipMessage(request.getTimestamp(), myself, request.getPayload(), protoID);
+        GossipMessage msg = new GossipMessage(request.getTimestamp(), myself, request.getPayload());
         logger.debug("Broadcast {} (eager={}, lazy={})", msg.getMID(), eagerPushPeers.size(), lazyPushPeers.size());
 
         deliver(msg.clone());

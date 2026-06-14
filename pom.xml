@@ -6,7 +6,7 @@
 
     <groupId>pt.paradigmshift.babel</groupId>
     <artifactId>plumtree</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <name>Babel Plumtree (Epidemic Broadcast Trees)</name>
     <description>
         Push-lazy-push multicast tree (Plumtree) dissemination for Babel
