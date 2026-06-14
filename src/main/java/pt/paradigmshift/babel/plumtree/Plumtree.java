@@ -75,18 +75,25 @@ import pt.unl.fct.di.novasys.network.data.Host;
  * broadcaster and shared by all senders. For per-sender trees see
  * {@link MultiPlumtree}.
  *
- * <h2>Channel modes</h2>
+ * <h2>Channel modes ({@code Plumtree.PeerAddressResolution})</h2>
+ * One parameter selects how a peer's Plumtree endpoint is resolved from the
+ * membership endpoint, and whether this protocol owns a channel:
  * <ul>
- *   <li><b>Own channel</b> (default): the protocol creates and binds its own
- *       {@link TCPChannel}, opens one connection per up-neighbour, and
- *       announces the channel via {@link ChannelAvailableNotification} so other
- *       protocols may share it. It ignores channels announced by others.</li>
- *   <li><b>Shared channel</b> ({@code Plumtree.UseSharedChannel=true}): the
- *       protocol opens no channel of its own; it waits for a {@link
- *       ChannelAvailableNotification} (e.g. from HyParView) and attaches to
- *       that channel. Connection management is then the channel owner's
+ *   <li><b>{@code offset}</b> (default): own channel; a peer's port is its
+ *       membership port plus {@link #PAR_PORT_OFFSET} (default {@code 1}). The
+ *       general case — works whenever nodes may bind different ports.</li>
+ *   <li><b>{@code fixed}</b>: own channel; every peer is assumed to listen on
+ *       {@link #PAR_PEER_PORT} (defaults to this node's own channel port). For
+ *       uniform deployments where all nodes share one port.</li>
+ *   <li><b>{@code shared}</b>: opens no channel of its own; it waits for a
+ *       {@link ChannelAvailableNotification} (e.g. from HyParView) and attaches
+ *       to that channel. Connection management is then the channel owner's
  *       responsibility — neighbour up/down only updates the tree sets.</li>
  * </ul>
+ * In the own-channel modes ({@code offset}/{@code fixed}) the protocol binds its
+ * own {@link TCPChannel}, opens one connection per up-neighbour, and announces
+ * the channel via {@link ChannelAvailableNotification} so others may share it.
+ * This mirrors {@code babel-eager-gossip-broadcast}'s {@code PeerAddressResolution}.
  *
  * @see MultiPlumtree
  * @see GossipMessage
@@ -100,10 +107,29 @@ public class Plumtree extends GenericProtocol {
     /** Babel protocol name. */
     public static final String PROTOCOL_NAME = "Plumtree";
 
-    /** Property — attach to a channel announced by another protocol instead of opening one. */
-    public static final String PAR_USE_SHARED_CHANNEL = "Plumtree.UseSharedChannel";
-    /** Default for {@link #PAR_USE_SHARED_CHANNEL}: {@value}. */
-    public static final boolean DEFAULT_USE_SHARED_CHANNEL = false;
+    /**
+     * Property — how a peer's Plumtree endpoint is resolved from the membership
+     * endpoint (and whether this protocol owns a channel). One of
+     * {@link #RESOLUTION_OFFSET}, {@link #RESOLUTION_FIXED} or
+     * {@link #RESOLUTION_SHARED}. Mirrors {@code babel-eager-gossip-broadcast}.
+     */
+    public static final String PAR_PEER_ADDRESS_RESOLUTION = "Plumtree.PeerAddressResolution";
+    /** {@link #PAR_PEER_ADDRESS_RESOLUTION} value: own channel; peer port = its membership port + {@link #PAR_PORT_OFFSET}. */
+    public static final String RESOLUTION_OFFSET = "offset";
+    /** {@link #PAR_PEER_ADDRESS_RESOLUTION} value: own channel; every peer listens on {@link #PAR_PEER_PORT}. */
+    public static final String RESOLUTION_FIXED = "fixed";
+    /** {@link #PAR_PEER_ADDRESS_RESOLUTION} value: attach to a channel announced by another protocol (e.g. HyParView). */
+    public static final String RESOLUTION_SHARED = "shared";
+    /** Default for {@link #PAR_PEER_ADDRESS_RESOLUTION}: {@value}. */
+    public static final String DEFAULT_PEER_ADDRESS_RESOLUTION = RESOLUTION_OFFSET;
+
+    /** Property — port distance from a peer's membership channel to its Plumtree channel ({@code offset} mode only). */
+    public static final String PAR_PORT_OFFSET = "Plumtree.PortOffset";
+    /** Default for {@link #PAR_PORT_OFFSET}: {@value}. */
+    public static final String DEFAULT_PORT_OFFSET = "1";
+
+    /** Property — the uniform port every peer's Plumtree channel listens on ({@code fixed} mode only); defaults to this node's own {@link #PAR_CHANNEL_PORT}. */
+    public static final String PAR_PEER_PORT = "Plumtree.PeerPort";
 
     /** Property — TCP bind address (own-channel mode). Defaults to the {@code myself} host. */
     public static final String PAR_CHANNEL_ADDRESS = "Plumtree.Channel.Address";
@@ -161,18 +187,18 @@ public class Plumtree extends GenericProtocol {
     /** Default delivery-window timeout: {@value} ms (10 minutes). */
     public static final String DEFAULT_DELIVERY_TIMEOUT = "600000";
 
-    /** Property — single-host test support: neighbour Plumtree port is {@code peer.port + 1}. */
-    public static final String PAR_LOCAL_SUPPORT = "Plumtree.LocalSupport";
-    /** Default for {@link #PAR_LOCAL_SUPPORT}: {@value}. */
-    public static final boolean DEFAULT_LOCAL_SUPPORT = false;
-
     private final long timeout1;
     private final long timeout2;
     private final long dispatchPeriod;
     private final boolean optimization;
     private final int threshold;
     private final long removeTimeWindow;
-    private final boolean localSupport;
+
+    /** Peer-address resolution strategy — see {@link #PAR_PEER_ADDRESS_RESOLUTION}. */
+    private enum Resolution { OFFSET, FIXED, SHARED }
+    private final Resolution resolution;
+    private final int portOffset;
+    private final int peerPort;
 
     private final boolean managingChannel;
     private boolean channelReady;
@@ -210,9 +236,9 @@ public class Plumtree extends GenericProtocol {
 
     /**
      * Construct the protocol and wire its handlers. Depending on
-     * {@link #PAR_USE_SHARED_CHANNEL} it either binds its own TCP channel now
-     * or subscribes to {@link ChannelAvailableNotification} to attach to a
-     * shared one.
+     * {@link #PAR_PEER_ADDRESS_RESOLUTION} it either binds its own TCP channel
+     * now ({@code offset}/{@code fixed}) or subscribes to {@link
+     * ChannelAvailableNotification} to attach to a shared one ({@code shared}).
      *
      * @param properties protocol configuration; see the {@code PAR_*} constants
      * @param myself     this node's {@link Host} identity. May be {@code null}
@@ -231,13 +257,14 @@ public class Plumtree extends GenericProtocol {
         this.optimization = readBool(properties, PAR_OPTIMIZATION, DEFAULT_OPTIMIZATION);
         this.threshold = Integer.parseInt(properties.getProperty(PAR_THRESHOLD, DEFAULT_THRESHOLD));
         this.removeTimeWindow = Long.parseLong(properties.getProperty(PAR_DELIVERY_TIMEOUT, DEFAULT_DELIVERY_TIMEOUT));
-        this.localSupport = readBool(properties, PAR_LOCAL_SUPPORT, DEFAULT_LOCAL_SUPPORT);
+        this.resolution = parseResolution(properties.getProperty(
+                PAR_PEER_ADDRESS_RESOLUTION, DEFAULT_PEER_ADDRESS_RESOLUTION));
+        this.portOffset = Integer.parseInt(properties.getProperty(PAR_PORT_OFFSET, DEFAULT_PORT_OFFSET));
 
         this.sentMessagesCounter = registerMetric(
                 new Counter.Builder("SentMessages", Metric.Unit.NONE).build());
 
-        boolean wantShared = readBool(properties, PAR_USE_SHARED_CHANNEL, DEFAULT_USE_SHARED_CHANNEL);
-        if (!wantShared) {
+        if (resolution != Resolution.SHARED) {
             this.managingChannel = true;
             String address = properties.getProperty(PAR_CHANNEL_ADDRESS);
             String port = properties.getProperty(PAR_CHANNEL_PORT);
@@ -252,6 +279,9 @@ public class Plumtree extends GenericProtocol {
             } else {
                 this.networkPort = Integer.parseInt(port);
             }
+            // fixed mode: peers are assumed to listen on PeerPort (defaults to our own channel port).
+            this.peerPort = Integer.parseInt(
+                    properties.getProperty(PAR_PEER_PORT, Integer.toString(this.networkPort)));
             this.myself = myself != null ? myself : new Host(InetAddress.getByName(address), this.networkPort);
 
             Properties channelProps = new Properties();
@@ -260,9 +290,10 @@ public class Plumtree extends GenericProtocol {
             this.channelId = createChannel(TCPChannel.NAME, channelProps);
             setDefaultChannel(this.channelId);
             registerSerializersAndHandlers();
-            logger.debug("Created own channel id={} bound to {}:{}", channelId, address, port);
+            logger.debug("Own channel id={} bound to {}:{} (resolution={})", channelId, address, port, resolution);
         } else {
             this.managingChannel = false;
+            this.peerPort = -1; // unused in shared mode
             subscribeNotification(ChannelAvailableNotification.NOTIFICATION_ID, this::uponChannelAvailable);
             logger.debug("Shared-channel mode: waiting for a ChannelAvailableNotification");
         }
@@ -643,15 +674,29 @@ public class Plumtree extends GenericProtocol {
 
     /**
      * Map a membership-reported peer endpoint to the endpoint Plumtree talks to
-     * it on. In shared-channel mode that is the same endpoint. In own-channel
-     * mode every node listens on {@link #networkPort} (or, under
-     * {@link #localSupport}, {@code peer.port + 1} for single-host tests).
+     * it on, per {@link #PAR_PEER_ADDRESS_RESOLUTION}: {@code offset} adds
+     * {@link #portOffset} to the peer's membership port, {@code fixed} uses the
+     * uniform {@link #peerPort}, and {@code shared} reuses the membership
+     * endpoint unchanged (same channel).
      */
     private Host neighborHost(Host peer) {
-        if (!managingChannel) {
-            return peer;
-        }
-        return new Host(peer.getAddress(), localSupport ? peer.getPort() + 1 : networkPort);
+        return switch (resolution) {
+            case OFFSET -> new Host(peer.getAddress(), peer.getPort() + portOffset);
+            case FIXED -> new Host(peer.getAddress(), peerPort);
+            case SHARED -> peer;
+        };
+    }
+
+    private static Resolution parseResolution(String raw) {
+        String v = raw == null ? "" : raw.trim().toLowerCase();
+        return switch (v) {
+            case RESOLUTION_OFFSET -> Resolution.OFFSET;
+            case RESOLUTION_FIXED -> Resolution.FIXED;
+            case RESOLUTION_SHARED -> Resolution.SHARED;
+            default -> throw new IllegalArgumentException(PAR_PEER_ADDRESS_RESOLUTION
+                    + " must be one of '" + RESOLUTION_OFFSET + "', '" + RESOLUTION_FIXED
+                    + "', '" + RESOLUTION_SHARED + "' (was: '" + raw + "')");
+        };
     }
 
     private void registerSerializersAndHandlers() throws HandlerRegistrationException {

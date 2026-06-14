@@ -6,7 +6,7 @@ evolved independently by ParadigmShift.
 
 **Group ID:** `pt.paradigmshift.babel`
 **Artifact ID:** `plumtree`
-**Current version:** `0.2.0`
+**Current version:** `0.3.0`
 **Tested with:** `pt.paradigmshift.babel:babel-core` (Babel-Swarm core fork) and
 `pt.paradigmshift.babel:babel-protocols-common` (shared dissemination /
 membership API surface).
@@ -144,22 +144,23 @@ deliberately reuses them rather than duplicating the pool at `3101+`.
 
 ## Channel modes
 
-Both protocols support two channel modes, selected by the
-`*.UseSharedChannel` parameter:
+A single parameter, `*.PeerAddressResolution`, selects how a peer's protocol
+endpoint is resolved from the membership endpoint **and** whether the protocol
+owns a channel (the same scheme as `babel-eager-gossip-broadcast`):
 
-- **Own channel** (default). The protocol creates and binds its own
-  `TCPChannel`, opens one connection per up-neighbour, manages reconnection,
-  and announces the channel via `ChannelAvailableNotification` so other
-  protocols may share it. Channels announced by *other* protocols are ignored.
-- **Shared channel** (`UseSharedChannel=true`). The protocol opens no channel;
-  it waits for a `ChannelAvailableNotification` (e.g. from HyParView) and
-  attaches to that channel with `registerSharedChannel`. Connection management
-  is then the owner's responsibility — `NeighborUp`/`NeighborDown` only update
-  the tree sets; no connections are opened or closed.
-
-In own-channel mode every node is assumed to run the protocol on the same port
-(`*.Channel.Port`); set `*.LocalSupport=true` for single-host test deployments,
-where a neighbour's port is taken as its membership port `+ 1`.
+- **`offset`** (default). Own channel: the protocol creates and binds its own
+  `TCPChannel`, opens one connection per up-neighbour, manages reconnection, and
+  announces the channel via `ChannelAvailableNotification` so others may share
+  it. A peer's port is its **membership port + `*.PortOffset`** (default `1`).
+  This is the general case — it works whenever nodes may bind different ports
+  (heterogeneous configs, several nodes per host, …), not just local testing.
+- **`fixed`**. Own channel, as above, but every peer is assumed to listen on one
+  uniform `*.PeerPort` (defaulting to this node's own `*.Channel.Port`). For a
+  deployment where the whole system shares a single, known port.
+- **`shared`**. The protocol opens no channel; it waits for a
+  `ChannelAvailableNotification` (e.g. from HyParView) and attaches with
+  `registerSharedChannel`. Connection management is then the owner's
+  responsibility — `NeighborUp`/`NeighborDown` only update the tree sets.
 
 ## Configuration
 
@@ -167,7 +168,9 @@ where a neighbour's port is taken as its membership port `+ 1`.
 
 | Property | Default | Description |
 |---|---|---|
-| `Plumtree.UseSharedChannel` | `false` | Attach to a channel announced by another protocol instead of opening one. |
+| `Plumtree.PeerAddressResolution` | `offset` | Peer-port resolution + channel ownership: `offset` (own channel; peer port = membership port + `PortOffset`), `fixed` (own channel; peer port = `PeerPort`), or `shared` (attach to a channel announced by, e.g., HyParView). |
+| `Plumtree.PortOffset` | `1` | `offset` mode only: distance from a peer's membership port to its Plumtree port. |
+| `Plumtree.PeerPort` | own `Channel.Port` | `fixed` mode only: the uniform port every peer's Plumtree channel listens on. |
 | `Plumtree.Channel.Address` | from `myself` | TCP bind address (own-channel mode). |
 | `Plumtree.Channel.Port` | from `myself` | TCP bind port (own-channel mode). |
 | `Plumtree.Timeout1` | `1000` ms | Long recovery timeout: wait after the first `IHAVE` before grafting. Set from overlay diameter × target recovery latency. |
@@ -176,18 +179,18 @@ where a neighbour's port is taken as its membership port `+ 1`.
 | `Plumtree.Optimization` | `false` | Enable the round-based tree optimization (Algorithm 4). |
 | `Plumtree.Optimization.Threshold` | `3` | Min. eager-vs-lazy hop-count difference before swapping links. Lower = more aggressive / less stable. |
 | `Plumtree.DeliveredTimeout` | `600000` ms | How long a delivered message is kept (dedup + graft replay window). |
-| `Plumtree.LocalSupport` | `false` | Single-host tests: neighbour port = membership port `+ 1`. |
 
 ### `MultiPlumtree` (slot 3100)
 
 | Property | Default | Description |
 |---|---|---|
-| `MultiPlumtree.UseSharedChannel` | `false` | Attach to a channel announced by another protocol instead of opening one. |
+| `MultiPlumtree.PeerAddressResolution` | `offset` | Peer-port resolution + channel ownership: `offset` (own channel; peer port = membership port + `PortOffset`), `fixed` (own channel; peer port = `PeerPort`), or `shared` (attach to a channel announced by, e.g., HyParView). |
+| `MultiPlumtree.PortOffset` | `1` | `offset` mode only: distance from a peer's membership port to its MultiPlumtree port. |
+| `MultiPlumtree.PeerPort` | own `Channel.Port` | `fixed` mode only: the uniform port every peer's MultiPlumtree channel listens on. |
 | `MultiPlumtree.Channel.Address` | from `myself` | TCP bind address (own-channel mode). |
 | `MultiPlumtree.Channel.Port` | from `myself` | TCP bind port (own-channel mode). |
 | `MultiPlumtree.LazyTickPeriod` | `1000` ms | Lazy-queue flush / re-advertisement period. Bounds tree-repair latency. |
 | `MultiPlumtree.DeliveredTimeout` | `600000` ms | How long a delivered message is kept (dedup + graft replay window). |
-| `MultiPlumtree.LocalSupport` | `false` | Single-host tests: neighbour port = membership port `+ 1`. |
 
 ## How application protocols plug in
 
@@ -249,7 +252,7 @@ babel.discovery=pt.unl.fct.di.novasys.babel.core.protocols.discovery.MulticastDi
 HyParView.Channel.Port=5000
 
 # dissemination attaches to the announced channel instead of opening its own
-MultiPlumtree.UseSharedChannel=true
+MultiPlumtree.PeerAddressResolution=shared
 ```
 
 For a complete, runnable wiring (HyParView + MultiPlumtree/Plumtree + a
